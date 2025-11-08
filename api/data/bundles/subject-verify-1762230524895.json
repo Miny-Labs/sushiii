@@ -1,0 +1,20 @@
+{
+  "subject_id": "subject-verify",
+  "consents": [
+    {
+      "id": "consent-1",
+      "subject_id": "subject-verify",
+      "status": "active",
+      "timestamp": "2025-11-04T04:28:44.894Z"
+    }
+  ],
+  "snapshot_refs": [
+    {
+      "ordinal": 100,
+      "hash": "verify-hash",
+      "timestamp": "2025-11-04T04:28:44.894Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:28:44.895Z",
+  "signature": "2e6bb9485a2a31f5ee759c47c173ba0a29f2a6131210576e29d68e008b258eeeac78e97f138821ca9f36814b552b044d288d61dcbb152c747d30136a3455580a"
+}

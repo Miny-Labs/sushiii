@@ -1,0 +1,13 @@
+{
+  "subject_id": "subject-get",
+  "consents": [],
+  "snapshot_refs": [
+    {
+      "ordinal": 1,
+      "hash": "hash",
+      "timestamp": "2025-11-04T04:19:47.740Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:19:47.741Z",
+  "signature": "8148d4a89689029c0808841b72a11fe0e5ee2660bd1c4e8a32b4d109c77853ff72e6e267debd05b26d8e33ab74a120d00991033a86f38385679f01f61bfb3208"
+}

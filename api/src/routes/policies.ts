@@ -8,6 +8,7 @@ const router = Router();
 const PolicyVersionSchema = z.object({
   policy_id: z.string(),
   version: z.string(),
+  text: z.string().min(10),
   content_hash: z.string().length(64),
   uri: z.string().url(),
   jurisdiction: z.string().length(2),

@@ -1,0 +1,13 @@
+{
+  "subject_id": "subject-disk",
+  "consents": [],
+  "snapshot_refs": [
+    {
+      "ordinal": 1,
+      "hash": "hash",
+      "timestamp": "2025-11-04T04:23:08.446Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:23:08.448Z",
+  "signature": "f6af51fb7525f5f92543f79693366086afe57896f1fd861d88911bc403202eefafa6f0a2ca32b8665d27adfdc9d6850a0add001d9803c646fa193dc129c76500"
+}

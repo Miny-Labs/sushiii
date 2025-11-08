@@ -1,0 +1,13 @@
+{
+  "subject_id": "subject-cleanup",
+  "consents": [],
+  "snapshot_refs": [
+    {
+      "ordinal": 1,
+      "hash": "hash",
+      "timestamp": "2025-11-04T04:23:08.820Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:23:08.821Z",
+  "signature": "6114ae33f8b6c78590e6689a1a05d9f4d7f1de8f3523dd39e46833322230e214bfc7b2bab3093437e9922f59db8c0235030142c13661bd4127c35f7d329c2a04"
+}

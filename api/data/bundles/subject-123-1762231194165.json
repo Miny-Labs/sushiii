@@ -1,0 +1,13 @@
+{
+  "subject_id": "subject-123",
+  "consents": [],
+  "snapshot_refs": [
+    {
+      "ordinal": 500,
+      "hash": "constellation-snapshot-hash",
+      "timestamp": "2025-11-04T04:39:54.164Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:39:54.165Z",
+  "signature": "e8f2e552beefbce63dd240a86b2ce6d2315690cd6cd15d0c7c93a2ee7894d61d060b96e8aab5835fd89072cd5d79d8202ba7c6a06bec3c221480c8c2ba8ec80c"
+}

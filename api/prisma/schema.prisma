@@ -1,0 +1,477 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto, uuid_ossp(map: "uuid-ossp", schema: "public")]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model aggregated_proofs {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id            String   @db.Uuid
+  aggregate_id         String   @unique @db.VarChar(255)
+  component_bundle_ids Json
+  aggregated_signature String
+  merkle_root          String   @db.VarChar(64)
+  proof_count          Int
+  generated_at         DateTime @db.Timestamptz(6)
+  metadata             Json     @default("{}")
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+  tenants              tenants  @relation(fields: [tenant_id], references: [id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_logs {
+  id            BigInt   @id @default(autoincrement())
+  tenant_id     String   @db.Uuid
+  action        String   @db.VarChar(100)
+  actor_id      String?  @db.Uuid
+  actor_type    String?  @db.VarChar(50)
+  resource_type String   @db.VarChar(100)
+  resource_id   String   @db.VarChar(255)
+  changes       Json?
+  ip_address    String?  @db.Inet
+  user_agent    String?
+  timestamp     DateTime @default(now()) @db.Timestamptz(6)
+  severity      String   @default("info") @db.VarChar(20)
+  tenants       tenants  @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, actor_id])
+  @@index([tenant_id])
+  @@index([tenant_id, resource_type, resource_id])
+  @@index([timestamp])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model consent_conditions {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consent_id      String    @db.Uuid
+  condition_type  String    @db.VarChar(50)
+  condition_value Json
+  is_met          Boolean?
+  evaluated_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  consents        consents  @relation(fields: [consent_id], references: [id], onDelete: Cascade)
+}
+
+model consent_purpose_mappings {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consent_id       String           @db.Uuid
+  purpose_id       String           @db.Uuid
+  granted_at       DateTime         @default(now()) @db.Timestamptz(6)
+  revoked_at       DateTime?        @db.Timestamptz(6)
+  consents         consents         @relation(fields: [consent_id], references: [id], onDelete: Cascade)
+  consent_purposes consent_purposes @relation(fields: [purpose_id], references: [id])
+
+  @@unique([consent_id, purpose_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model consent_purposes {
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                String                     @db.Uuid
+  purpose_code             String                     @db.VarChar(100)
+  name                     String                     @db.VarChar(255)
+  description              String?
+  category                 String?                    @db.VarChar(50)
+  legal_basis              String?                    @db.VarChar(50)
+  retention_period         String?                    @db.VarChar(100)
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  consent_purpose_mappings consent_purpose_mappings[]
+
+  @@unique([tenant_id, purpose_code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model consents {
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                String                     @db.Uuid
+  subject_id               String                     @db.VarChar(64)
+  policy_version_id        String                     @db.Uuid
+  event_type               String                     @db.VarChar(20)
+  timestamp                DateTime                   @db.Timestamptz(6)
+  captured_at              DateTime                   @db.Timestamptz(6)
+  purposes                 Json                       @default("[]")
+  conditions               Json                       @default("{}")
+  expiry_date              DateTime?                  @db.Timestamptz(6)
+  geographic_scope         String?                    @db.VarChar(10)
+  metadata                 Json                       @default("{}")
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  consent_conditions       consent_conditions[]
+  consent_purpose_mappings consent_purpose_mappings[]
+  policy_versions          policy_versions            @relation(fields: [policy_version_id], references: [id])
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([tenant_id, policy_version_id])
+  @@index([tenant_id, subject_id])
+  @@index([tenant_id, subject_id, policy_version_id, event_type])
+  @@index([tenant_id, timestamp])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model encryption_keys {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String    @db.Uuid
+  key_id                String    @unique @db.VarChar(255)
+  algorithm             String    @db.VarChar(50)
+  public_key            String
+  encrypted_private_key String?
+  key_type              String    @db.VarChar(20)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at            DateTime? @db.Timestamptz(6)
+  revoked_at            DateTime? @db.Timestamptz(6)
+  tenants               tenants   @relation(fields: [tenant_id], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model event_log {
+  id             BigInt   @id @default(autoincrement())
+  tenant_id      String   @db.Uuid
+  event_type     String   @db.VarChar(100)
+  aggregate_id   String   @db.VarChar(255)
+  aggregate_type String   @db.VarChar(100)
+  event_data     Json
+  metadata       Json     @default("{}")
+  version        Int
+  timestamp      DateTime @default(now()) @db.Timestamptz(6)
+  created_by     String?  @db.Uuid
+  tenants        tenants  @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, aggregate_id, version])
+  @@index([tenant_id, aggregate_id, aggregate_type])
+  @@index([tenant_id, event_type])
+  @@index([timestamp])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model geographic_scopes {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @db.VarChar(100)
+  scope_type String   @db.VarChar(20)
+  countries  Json     @default("[]")
+  regions    Json     @default("[]")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model jurisdiction_requirements {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jurisdiction    String    @db.VarChar(10)
+  framework       String    @db.VarChar(50)
+  requirements    Json
+  effective_from  DateTime  @db.Timestamptz(6)
+  effective_until DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([jurisdiction, framework, effective_from])
+}
+
+model permissions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @unique @db.VarChar(100)
+  resource_type    String             @db.VarChar(100)
+  action           String             @db.VarChar(50)
+  description      String?
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  role_permissions role_permissions[]
+}
+
+model policies {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id               String                   @db.Uuid
+  policy_id               String                   @db.VarChar(255)
+  name                    String                   @db.VarChar(255)
+  description             String?
+  parent_policy_id        String?                  @db.Uuid
+  jurisdiction            String                   @db.VarChar(10)
+  template_type           String?                  @db.VarChar(50)
+  metadata                Json                     @default("{}")
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  deleted_at              DateTime?                @db.Timestamptz(6)
+  policies                policies?                @relation("policiesTopolicies", fields: [parent_policy_id], references: [id])
+  other_policies          policies[]               @relation("policiesTopolicies")
+  tenants                 tenants                  @relation(fields: [tenant_id], references: [id])
+  policy_update_schedules policy_update_schedules?
+  policy_versions         policy_versions[]
+
+  @@unique([tenant_id, policy_id])
+  @@index([parent_policy_id])
+  @@index([tenant_id, deleted_at])
+  @@index([tenant_id, jurisdiction])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model policy_compliance {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  policy_version_id  String          @db.Uuid
+  framework          String          @db.VarChar(50)
+  article_references Json            @default("[]")
+  compliance_status  String          @default("pending") @db.VarChar(20)
+  validated_at       DateTime?       @db.Timestamptz(6)
+  validated_by       String?         @db.Uuid
+  notes              String?
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  policy_versions    policy_versions @relation(fields: [policy_version_id], references: [id])
+}
+
+model policy_templates {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String   @db.VarChar(255)
+  description          String?
+  jurisdiction         String   @db.VarChar(10)
+  template_type        String   @db.VarChar(50)
+  template_content     Json
+  compliance_framework String?  @db.VarChar(50)
+  version              String   @db.VarChar(50)
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([name, version])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model policy_update_schedules {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String    @db.Uuid
+  policy_id       String    @unique @db.Uuid
+  schedule_type   String    @db.VarChar(20)
+  schedule_config Json
+  next_update_at  DateTime? @db.Timestamptz(6)
+  last_updated_at DateTime? @db.Timestamptz(6)
+  status          String    @default("active") @db.VarChar(20)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  policies        policies  @relation(fields: [policy_id], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model policy_version_diffs {
+  id                                                                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                             String          @db.Uuid
+  from_version_id                                                       String          @db.Uuid
+  to_version_id                                                         String          @db.Uuid
+  diff_data                                                             Json
+  diff_summary                                                          String?
+  created_at                                                            DateTime        @default(now()) @db.Timestamptz(6)
+  policy_versions_policy_version_diffs_from_version_idTopolicy_versions policy_versions @relation("policy_version_diffs_from_version_idTopolicy_versions", fields: [from_version_id], references: [id])
+  policy_versions_policy_version_diffs_to_version_idTopolicy_versions   policy_versions @relation("policy_version_diffs_to_version_idTopolicy_versions", fields: [to_version_id], references: [id])
+
+  @@unique([from_version_id, to_version_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model policy_versions {
+  id                                                                         String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                                  String                 @db.Uuid
+  policy_id                                                                  String                 @db.Uuid
+  version                                                                    String                 @db.VarChar(50)
+  content_hash                                                               String                 @db.VarChar(64)
+  uri                                                                        String
+  effective_from                                                             DateTime               @db.Timestamptz(6)
+  effective_until                                                            DateTime?              @db.Timestamptz(6)
+  status                                                                     String                 @default("draft") @db.VarChar(20)
+  compliance_mappings                                                        Json                   @default("{}")
+  created_at                                                                 DateTime               @default(now()) @db.Timestamptz(6)
+  created_by                                                                 String?                @db.Uuid
+  consents                                                                   consents[]
+  policy_compliance                                                          policy_compliance[]
+  policy_version_diffs_policy_version_diffs_from_version_idTopolicy_versions policy_version_diffs[] @relation("policy_version_diffs_from_version_idTopolicy_versions")
+  policy_version_diffs_policy_version_diffs_to_version_idTopolicy_versions   policy_version_diffs[] @relation("policy_version_diffs_to_version_idTopolicy_versions")
+  policies                                                                   policies               @relation(fields: [policy_id], references: [id])
+  tenants                                                                    tenants                @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, policy_id, version])
+  @@index([tenant_id])
+  @@index([tenant_id, policy_id, status])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model proof_bundles {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id         String              @db.Uuid
+  bundle_id         String              @unique @db.VarChar(255)
+  subject_id        String              @db.VarChar(64)
+  bundle_data       Json
+  signature         String
+  encryption_key_id String?             @db.VarChar(255)
+  encrypted         Boolean             @default(false)
+  generated_at      DateTime            @db.Timestamptz(6)
+  expires_at        DateTime?           @db.Timestamptz(6)
+  metadata          Json                @default("{}")
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  tenants           tenants             @relation(fields: [tenant_id], references: [id])
+  proof_delegations proof_delegations[]
+  time_lock_puzzles time_lock_puzzles?
+  zk_proofs         zk_proofs?
+
+  @@index([generated_at])
+  @@index([tenant_id])
+  @@index([tenant_id, subject_id])
+}
+
+model proof_delegations {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proof_bundle_id      String        @db.Uuid
+  delegator_id         String        @db.VarChar(255)
+  delegate_id          String        @db.VarChar(255)
+  delegation_signature String
+  permissions          Json          @default("[]")
+  valid_from           DateTime      @db.Timestamptz(6)
+  valid_until          DateTime?     @db.Timestamptz(6)
+  revoked_at           DateTime?     @db.Timestamptz(6)
+  created_at           DateTime      @default(now()) @db.Timestamptz(6)
+  proof_bundles        proof_bundles @relation(fields: [proof_bundle_id], references: [id])
+}
+
+model role_permissions {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id       String      @db.Uuid
+  permission_id String      @db.Uuid
+  conditions    Json        @default("{}")
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, permission_id])
+}
+
+model roles {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String?            @db.Uuid
+  name             String             @db.VarChar(100)
+  description      String?
+  is_system_role   Boolean            @default(false)
+  permissions      Json               @default("[]")
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  role_permissions role_permissions[]
+  user_roles       user_roles[]
+
+  @@unique([tenant_id, name])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model snapshots {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id      String   @db.Uuid
+  aggregate_id   String   @db.VarChar(255)
+  aggregate_type String   @db.VarChar(100)
+  version        Int
+  snapshot_data  Json
+  timestamp      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([tenant_id, aggregate_id, version])
+  @@index([tenant_id, aggregate_id, aggregate_type, version(sort: Desc)])
+}
+
+model tenant_quotas {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                 String   @unique @db.Uuid
+  max_policies              Int      @default(100)
+  max_consents_per_month    Int      @default(10000)
+  max_proof_bundles_per_day Int      @default(100)
+  max_users                 Int      @default(10)
+  max_storage_mb            Int      @default(1000)
+  created_at                DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime @default(now()) @db.Timestamptz(6)
+  tenants                   tenants  @relation(fields: [tenant_id], references: [id])
+}
+
+model tenants {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String              @db.VarChar(255)
+  slug              String              @unique @db.VarChar(100)
+  api_key           String              @unique @db.VarChar(255)
+  settings          Json                @default("{}")
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?           @db.Timestamptz(6)
+  aggregated_proofs aggregated_proofs[]
+  audit_logs        audit_logs[]
+  consents          consents[]
+  encryption_keys   encryption_keys[]
+  event_log         event_log[]
+  policies          policies[]
+  policy_versions   policy_versions[]
+  proof_bundles     proof_bundles[]
+  tenant_quotas     tenant_quotas?
+  usage_metrics     usage_metrics[]
+  users             users[]
+}
+
+model time_lock_puzzles {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proof_bundle_id String        @unique @db.Uuid
+  puzzle_data     Json
+  difficulty      BigInt
+  unlock_time     DateTime      @db.Timestamptz(6)
+  unlocked_at     DateTime?     @db.Timestamptz(6)
+  solution        String?
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  proof_bundles   proof_bundles @relation(fields: [proof_bundle_id], references: [id])
+}
+
+model usage_metrics {
+  id           BigInt   @id @default(autoincrement())
+  tenant_id    String   @db.Uuid
+  metric_type  String   @db.VarChar(50)
+  metric_value BigInt
+  period_start DateTime @db.Timestamptz(6)
+  period_end   DateTime @db.Timestamptz(6)
+  metadata     Json     @default("{}")
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  tenants      tenants  @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, metric_type, period_start])
+  @@index([tenant_id, metric_type, period_start])
+}
+
+model user_roles {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  role_id    String    @db.Uuid
+  granted_by String?   @db.Uuid
+  granted_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at DateTime? @db.Timestamptz(6)
+  roles      roles     @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, role_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model users {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String       @db.Uuid
+  email         String       @db.VarChar(255)
+  name          String       @db.VarChar(255)
+  password_hash String       @db.VarChar(255)
+  status        String       @default("active") @db.VarChar(20)
+  metadata      Json         @default("{}")
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime     @default(now()) @db.Timestamptz(6)
+  last_login_at DateTime?    @db.Timestamptz(6)
+  user_roles    user_roles[]
+  tenants       tenants      @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, email])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model zk_proofs {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proof_bundle_id  String        @unique @db.Uuid
+  proof_type       String        @db.VarChar(50)
+  proof_data       Json
+  public_inputs    Json
+  verification_key String
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  proof_bundles    proof_bundles @relation(fields: [proof_bundle_id], references: [id])
+}
