@@ -19,9 +19,11 @@ project/project/
 
 # Environment files
 .env
+.env.*
 .env.local
 .env.production
 .env.development
+.env.blockchain
 
 # IDE
 .vscode/

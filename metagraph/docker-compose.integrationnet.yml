@@ -1,0 +1,141 @@
+version: '3.8'
+
+# Sushiii Metagraph - IntegrationNet Deployment
+#
+# This Docker Compose configuration deploys the Sushiii metagraph
+# to Constellation Network's IntegrationNet (testnet).
+#
+# Prerequisites:
+# 1. Build JARs: sbt assembly
+# 2. Generate wallet: cd ../api && npm run generate-wallet
+# 3. Fund wallet: https://faucet.constellationnetwork.io
+# 4. Create .env.integrationnet with configuration (see below)
+#
+# Usage:
+#   docker-compose -f docker-compose.integrationnet.yml up -d
+#   docker-compose -f docker-compose.integrationnet.yml logs -f
+#   docker-compose -f docker-compose.integrationnet.yml down
+
+services:
+  metagraph-l0:
+    image: openjdk:11-jre-slim
+    container_name: sushiii-metagraph-l0
+    restart: unless-stopped
+    ports:
+      - "9200:9200"  # HTTP API
+      - "9201:9201"  # Public port
+      - "9202:9202"  # P2P
+      - "9203:9203"  # CLI
+    volumes:
+      - ./modules/l0/target/scala-2.13/sushiii-metagraph-l0-assembly-0.1.0.jar:/app/metagraph-l0.jar:ro
+      - l0-data:/data
+      - l0-logs:/logs
+    environment:
+      # Java options
+      JAVA_OPTS: "-Xmx3g -Xms3g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+      # Constellation Network - IntegrationNet
+      GLOBAL_L0_URL: "https://be-integrationnet.constellationnetwork.io"
+      GLOBAL_L0_PEER_HTTP_PORT: "443"
+      NETWORK_VERSION: "2.0"
+
+      # Wallet (set via .env.integrationnet)
+      WALLET_PRIVATE_KEY: ${WALLET_PRIVATE_KEY}
+
+      # Ports
+      HTTP_PORT: "9200"
+      PUBLIC_PORT: "9201"
+      P2P_PORT: "9202"
+      CLI_PORT: "9203"
+
+    command: >
+      java ${JAVA_OPTS}
+      -jar /app/metagraph-l0.jar
+      --http-port 9200
+      --public-port 9201
+      --p2p-port 9202
+      --cli-port 9203
+      --global-l0-peer-http-host be-integrationnet.constellationnetwork.io
+      --global-l0-peer-http-port 443
+      run-genesis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/cluster/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - metagraph-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  metagraph-l1:
+    image: openjdk:11-jre-slim
+    container_name: sushiii-metagraph-l1
+    restart: unless-stopped
+    depends_on:
+      metagraph-l0:
+        condition: service_healthy
+    ports:
+      - "9400:9400"  # HTTP API
+      - "9401:9401"  # Public port
+      - "9402:9402"  # P2P
+      - "9403:9403"  # CLI
+    volumes:
+      - ./modules/data_l1/target/scala-2.13/sushiii-metagraph-l1-assembly-0.1.0.jar:/app/metagraph-l1.jar:ro
+      - l1-data:/data
+      - l1-logs:/logs
+    environment:
+      # Java options
+      JAVA_OPTS: "-Xmx2g -Xms2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+      # L0 connection
+      L0_PEER_HTTP_HOST: "metagraph-l0"
+      L0_PEER_HTTP_PORT: "9200"
+
+      # Ports
+      HTTP_PORT: "9400"
+      PUBLIC_PORT: "9401"
+      P2P_PORT: "9402"
+      CLI_PORT: "9403"
+
+    command: >
+      java ${JAVA_OPTS}
+      -jar /app/metagraph-l1.jar
+      --http-port 9400
+      --public-port 9401
+      --p2p-port 9402
+      --cli-port 9403
+      --l0-peer-http-host metagraph-l0
+      --l0-peer-http-port 9200
+      run-validator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9400/cluster/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - metagraph-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+networks:
+  metagraph-network:
+    driver: bridge
+
+volumes:
+  l0-data:
+    driver: local
+  l0-logs:
+    driver: local
+  l1-data:
+    driver: local
+  l1-logs:
+    driver: local

@@ -1,0 +1,313 @@
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Note: Prisma will generate the core tables from schema.prisma
+-- This migration adds additional constraints and RLS policies
+
+-- ============================================================================
+-- ROW-LEVEL SECURITY SETUP
+-- ============================================================================
+
+-- Enable RLS on all tenant-scoped tables
+ALTER TABLE policies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE policy_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE proof_bundles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consent_purposes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE encryption_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE aggregated_proofs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE policy_version_diffs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE policy_update_schedules ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for tenant isolation
+CREATE POLICY tenant_isolation_policy ON policies
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON policy_versions
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON consents
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON proof_bundles
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON event_log
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON audit_logs
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON users
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON consent_purposes
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON encryption_keys
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON aggregated_proofs
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON snapshots
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON policy_version_diffs
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+CREATE POLICY tenant_isolation_policy ON policy_update_schedules
+  USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+
+-- ============================================================================
+-- CHECK CONSTRAINTS
+-- ============================================================================
+
+-- Ensure valid status values (in addition to Prisma enums)
+ALTER TABLE policy_versions ADD CONSTRAINT check_policy_version_status
+  CHECK (status IN ('draft', 'active', 'deprecated', 'archived'));
+
+ALTER TABLE consents ADD CONSTRAINT check_consent_event_type
+  CHECK (event_type IN ('granted', 'revoked', 'updated', 'expired'));
+
+ALTER TABLE users ADD CONSTRAINT check_user_status
+  CHECK (status IN ('active', 'suspended', 'inactive'));
+
+ALTER TABLE policy_update_schedules ADD CONSTRAINT check_schedule_type
+  CHECK (schedule_type IN ('manual', 'scheduled', 'compliance_driven'));
+
+ALTER TABLE policy_update_schedules ADD CONSTRAINT check_schedule_status
+  CHECK (status IN ('active', 'paused', 'completed'));
+
+ALTER TABLE policy_compliance ADD CONSTRAINT check_compliance_status
+  CHECK (compliance_status IN ('pending', 'compliant', 'non_compliant', 'review_required'));
+
+ALTER TABLE consent_conditions ADD CONSTRAINT check_condition_type
+  CHECK (condition_type IN ('time_limited', 'geographic', 'usage_limit', 'data_category', 'third_party'));
+
+ALTER TABLE geographic_scopes ADD CONSTRAINT check_scope_type
+  CHECK (scope_type IN ('country', 'region', 'eu', 'global'));
+
+ALTER TABLE encryption_keys ADD CONSTRAINT check_key_type
+  CHECK (key_type IN ('encryption', 'signing', 'time_lock'));
+
+ALTER TABLE zk_proofs ADD CONSTRAINT check_proof_type
+  CHECK (proof_type IN ('zk_snark', 'zk_stark', 'bulletproof'));
+
+ALTER TABLE audit_logs ADD CONSTRAINT check_severity
+  CHECK (severity IN ('debug', 'info', 'warning', 'error', 'critical'));
+
+-- Ensure slug format
+ALTER TABLE tenants ADD CONSTRAINT check_slug_format
+  CHECK (slug ~ '^[a-z0-9-]+$');
+
+-- ============================================================================
+-- FUNCTIONS & TRIGGERS
+-- ============================================================================
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply updated_at triggers
+CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_policies_updated_at BEFORE UPDATE ON policies
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tenant_quotas_updated_at BEFORE UPDATE ON tenant_quotas
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to enforce event log immutability
+CREATE OR REPLACE FUNCTION prevent_event_log_modification()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Event log is immutable. Cannot modify or delete events.';
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Prevent event log modification
+CREATE TRIGGER prevent_event_log_update BEFORE UPDATE ON event_log
+  FOR EACH ROW EXECUTE FUNCTION prevent_event_log_modification();
+
+CREATE TRIGGER prevent_event_log_delete BEFORE DELETE ON event_log
+  FOR EACH ROW EXECUTE FUNCTION prevent_event_log_modification();
+
+-- Function to auto-expire consents
+CREATE OR REPLACE FUNCTION check_consent_expiry()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.expiry_date IS NOT NULL AND NEW.expiry_date <= NOW() THEN
+    NEW.event_type = 'expired';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_consent_expiry_trigger BEFORE INSERT OR UPDATE ON consents
+  FOR EACH ROW EXECUTE FUNCTION check_consent_expiry();
+
+-- ============================================================================
+-- VIEWS
+-- ============================================================================
+
+-- View for active consents
+CREATE OR REPLACE VIEW active_consents AS
+SELECT
+  c.*,
+  CASE
+    WHEN c.expiry_date IS NOT NULL AND c.expiry_date <= NOW() THEN 'expired'
+    WHEN c.event_type = 'revoked' THEN 'revoked'
+    WHEN c.event_type = 'granted' THEN 'active'
+    ELSE 'unknown'
+  END as consent_status
+FROM consents c;
+
+-- View for active policy versions
+CREATE OR REPLACE VIEW active_policy_versions AS
+SELECT
+  pv.*,
+  p.name as policy_name,
+  p.jurisdiction
+FROM policy_versions pv
+JOIN policies p ON pv.policy_id = p.id
+WHERE pv.status = 'active'
+  AND (pv.effective_until IS NULL OR pv.effective_until > NOW())
+  AND pv.effective_from <= NOW();
+
+-- View for tenant usage summary
+CREATE OR REPLACE VIEW tenant_usage_summary AS
+SELECT
+  t.id as tenant_id,
+  t.name as tenant_name,
+  COUNT(DISTINCT p.id) as policy_count,
+  COUNT(DISTINCT pv.id) as policy_version_count,
+  COUNT(DISTINCT c.id) as consent_count,
+  COUNT(DISTINCT pb.id) as proof_bundle_count,
+  COUNT(DISTINCT u.id) as user_count,
+  tq.max_policies,
+  tq.max_consents_per_month,
+  tq.max_users
+FROM tenants t
+LEFT JOIN policies p ON t.id = p.tenant_id AND p.deleted_at IS NULL
+LEFT JOIN policy_versions pv ON t.id = pv.tenant_id
+LEFT JOIN consents c ON t.id = c.tenant_id
+LEFT JOIN proof_bundles pb ON t.id = pb.tenant_id
+LEFT JOIN users u ON t.id = u.tenant_id
+LEFT JOIN tenant_quotas tq ON t.id = tq.tenant_id
+WHERE t.deleted_at IS NULL
+GROUP BY t.id, t.name, tq.max_policies, tq.max_consents_per_month, tq.max_users;
+
+-- ============================================================================
+-- INDEXES FOR PERFORMANCE
+-- ============================================================================
+
+-- Composite indexes for common queries
+CREATE INDEX idx_consents_active_lookup
+  ON consents(tenant_id, subject_id, event_type, expiry_date)
+  WHERE event_type = 'granted';
+
+CREATE INDEX idx_policy_versions_active_lookup
+  ON policy_versions(tenant_id, policy_id, status, effective_from, effective_until)
+  WHERE status = 'active';
+
+CREATE INDEX idx_proof_bundles_recent
+  ON proof_bundles(tenant_id, generated_at DESC)
+  WHERE expires_at IS NULL OR expires_at > NOW();
+
+CREATE INDEX idx_event_log_recent
+  ON event_log(tenant_id, timestamp DESC);
+
+CREATE INDEX idx_audit_logs_recent
+  ON audit_logs(tenant_id, timestamp DESC);
+
+-- GIN indexes for JSON columns
+CREATE INDEX idx_policies_metadata ON policies USING GIN (metadata);
+CREATE INDEX idx_consents_purposes ON consents USING GIN (purposes);
+CREATE INDEX idx_consents_conditions ON consents USING GIN (conditions);
+CREATE INDEX idx_event_log_data ON event_log USING GIN (event_data);
+CREATE INDEX idx_event_log_metadata ON event_log USING GIN (metadata);
+
+-- ============================================================================
+-- INITIAL SYSTEM DATA
+-- ============================================================================
+
+-- Insert system-wide permissions
+INSERT INTO permissions (name, resource_type, action, description) VALUES
+  ('policy:create', 'policy', 'create', 'Create new policies'),
+  ('policy:read', 'policy', 'read', 'View policies'),
+  ('policy:update', 'policy', 'update', 'Update policies'),
+  ('policy:delete', 'policy', 'delete', 'Delete policies'),
+  ('policy:publish', 'policy', 'publish', 'Publish policy versions'),
+
+  ('consent:create', 'consent', 'create', 'Capture consents'),
+  ('consent:read', 'consent', 'read', 'View consents'),
+  ('consent:revoke', 'consent', 'revoke', 'Revoke consents'),
+  ('consent:update', 'consent', 'update', 'Update consents'),
+
+  ('proof:generate', 'proof', 'generate', 'Generate proof bundles'),
+  ('proof:read', 'proof', 'read', 'View proof bundles'),
+  ('proof:encrypt', 'proof', 'encrypt', 'Encrypt proof bundles'),
+  ('proof:delegate', 'proof', 'delegate', 'Delegate proof bundles'),
+
+  ('user:manage', 'user', 'manage', 'Manage users'),
+  ('role:manage', 'role', 'manage', 'Manage roles'),
+  ('tenant:configure', 'tenant', 'configure', 'Configure tenant settings'),
+  ('audit:read', 'audit', 'read', 'View audit logs'),
+  ('quota:manage', 'quota', 'manage', 'Manage quotas');
+
+-- Insert system roles
+INSERT INTO roles (name, description, is_system_role, permissions) VALUES
+  ('ADMIN', 'Full administrative access', true, '["policy:*", "consent:*", "proof:*", "user:manage", "role:manage", "tenant:configure", "audit:read", "quota:manage"]'),
+  ('MANAGER', 'Policy and proof management', true, '["policy:*", "consent:read", "proof:*", "audit:read"]'),
+  ('AUDITOR', 'Read-only access for auditing', true, '["policy:read", "consent:read", "proof:read", "audit:read"]'),
+  ('OPERATOR', 'Consent capture and proof generation', true, '["consent:create", "consent:read", "proof:generate", "proof:read"]'),
+  ('VIEWER', 'Read-only access', true, '["policy:read", "consent:read"]');
+
+-- Insert common policy templates
+INSERT INTO policy_templates (name, description, jurisdiction, template_type, template_content, compliance_framework, version) VALUES
+  ('GDPR Data Processing', 'Standard GDPR-compliant data processing policy', 'EU', 'gdpr_processing',
+   '{"lawful_basis": "consent", "data_categories": ["personal", "sensitive"], "retention": "as_required"}',
+   'GDPR', '1.0.0'),
+
+  ('CCPA Consumer Rights', 'California Consumer Privacy Act compliance', 'US', 'ccpa_consumer',
+   '{"rights": ["know", "delete", "opt_out"], "categories": ["personal_info", "commercial"]}',
+   'CCPA', '1.0.0'),
+
+  ('PIPEDA Consent', 'Canadian PIPEDA consent requirements', 'CA', 'pipeda_consent',
+   '{"principles": ["accountability", "consent", "limiting_collection"], "retention": "reasonable"}',
+   'PIPEDA', '1.0.0');
+
+-- Insert jurisdiction requirements
+INSERT INTO jurisdiction_requirements (jurisdiction, framework, requirements, effective_from) VALUES
+  ('EU', 'GDPR',
+   '{"articles": ["Art. 6", "Art. 7", "Art. 13", "Art. 15", "Art. 17", "Art. 21"], "require_explicit_consent": true, "right_to_be_forgotten": true}',
+   '2018-05-25'),
+
+  ('US', 'CCPA',
+   '{"sections": ["1798.100", "1798.105", "1798.110", "1798.115", "1798.120"], "opt_out_required": true, "disclosure_required": true}',
+   '2020-01-01'),
+
+  ('CA', 'PIPEDA',
+   '{"principles": ["Accountability", "Consent", "Limiting Collection", "Limiting Use", "Accuracy", "Safeguards", "Openness", "Individual Access", "Challenging Compliance"], "explicit_consent": true}',
+   '2001-01-01');
+
+COMMENT ON SCHEMA public IS 'Sushiii multi-tenant consent management database';

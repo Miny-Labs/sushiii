@@ -1,267 +1,692 @@
-# Sushiii
+# Sushiii - Privacy Compliance Platform
 
-**Policy-Aware Consent Ledger on Constellation Network**
+A professional blockchain-backed privacy compliance platform for managing policies, consents, and regulatory compliance (GDPR, CCPA, PIPEDA) with immutable blockchain verification on Constellation Network.
 
-Sushiii is a decentralized consent management system built on Constellation Network's Metagraph technology. It provides cryptographic proof of consent for compliance (GDPR, CCPA) and audit purposes.
+## Overview
 
-## Features
+Sushiii provides enterprise-grade privacy compliance management with:
 
-- **Immutable Consent Records**: All consent events stored on-chain with cryptographic finalization
-- **Policy Versioning**: Track policy changes over time with content hashing
-- **Privacy-First Design**: Subject IDs are hashed; no PII stored on-chain
-- **Cryptographic Proofs**: Generate verifiable proof bundles for audits
-- **Multi-Tenant**: Isolated data per tenant with API key authentication
-- **Real-Time Queries**: Query consent state via REST API or direct metagraph access
+- **Privacy Policy Management**: Version-controlled policies with advanced rich text editing, templates, and approval workflows
+- **Granular Consent Management**: User consent tracking with purpose-based permissions and audit trails
+- **Compliance Dashboard**: Real-time GDPR compliance scoring and checklist tracking
+- **Blockchain Verification**: Immutable records on Constellation Network metagraph
+- **Professional Export**: Export policies to PDF and HTML with custom branding
+- **Embeddable Widgets**: Drop-in consent widgets for websites
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│   Browser   │────▶│  API Server  │────▶│   Metagraph     │
-│     SDK     │     │  (Express)   │     │  (Scala/L0/L1)  │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │  Next.js UI  │
-                    │ Admin/Auditor│
-                    └──────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Next.js Frontend (Port 3003)              │
+│  • Policy creator with advanced rich text editor            │
+│  • Compliance dashboard and GDPR checklist                  │
+│  • Consent management UI                                    │
+│  • PDF/HTML export with custom branding                     │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│              TypeScript API (Port 3005)                      │
+│  • REST API for policies, consents, compliance              │
+│  • Multi-tenancy with API key authentication                │
+│  • PostgreSQL database integration                          │
+│  • Redis caching and rate limiting                          │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Constellation Network Metagraph (Local)              │
+│  • Data L1 (Port 9400) - Custom data validation            │
+│  • Metagraph L0 (Port 9200) - State consensus              │
+│  • Currency L1 (Port 9300) - Token layer                   │
+│  • Global L0 (Port 9000) - Network layer                   │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   PostgreSQL + Redis                         │
+│  • Policy and consent storage                               │
+│  • User and tenant management                               │
+│  • Session and rate limit cache                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-See [docs/architecture.md](docs/architecture.md) for details.
+## Prerequisites
 
-## Quick Start
+### Required Software
+- **Node.js 18+** and **npm**
+- **PostgreSQL 15+**
+- **Redis 7+**
+- **Docker Desktop** (with at least 8GB RAM allocated)
+- **Java 11+** (for blockchain)
+- **Git**
 
-### Prerequisites
+### Optional Tools
+- **cargo** (Rust package manager for `argc`)
+- **coursier** (Scala installer for `giter8`)
 
-- **Node.js**: >= 18.0.0
-- **pnpm**: >= 8.0.0
-- **SBT**: >= 1.9.8 (for Scala builds)
-- **Docker**: For local Constellation network
-- **Java**: JDK 11+ (for Scala/SBT)
+## Complete Setup Guide
 
-### Installation
+### Step 1: Install System Dependencies
 
-1. Clone the repository:
+#### Ubuntu/Debian
 ```bash
-git clone <repository-url>
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js 18
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+
+# Install Redis
+sudo apt install -y redis-server
+
+# Install Java 11
+sudo apt install -y openjdk-11-jdk
+
+# Install Docker (if not already installed)
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+#### macOS
+```bash
+# Install Homebrew if not installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install node@18 postgresql@15 redis openjdk@11 docker
+
+# Start services
+brew services start postgresql
+brew services start redis
+```
+
+### Step 2: Clone the Repository
+
+```bash
+cd ~/Desktop  # or your preferred directory
+git clone https://github.com/yourusername/sushiii.git
 cd sushiii
 ```
 
-2. Install dependencies:
+### Step 3: Setup PostgreSQL Database
+
 ```bash
-pnpm install
+# Start PostgreSQL (if not running)
+sudo systemctl start postgresql  # Linux
+# or
+brew services start postgresql   # macOS
+
+# Create database and user
+sudo -u postgres psql << EOF
+CREATE DATABASE sushiii;
+CREATE USER sushiii_user WITH ENCRYPTED PASSWORD 'sushiii_password';
+GRANT ALL PRIVILEGES ON DATABASE sushiii TO sushiii_user;
+\q
+EOF
 ```
 
-3. Copy environment files:
+### Step 4: Setup Redis
+
 ```bash
+# Start Redis (if not running)
+sudo systemctl start redis  # Linux
+# or
+brew services start redis   # macOS
+
+# Test Redis connection
+redis-cli ping  # Should return "PONG"
+```
+
+### Step 5: Setup API Backend
+
+```bash
+cd api
+
+# Install dependencies
+npm install
+
+# Create environment file
 cp .env.example .env
-cp api/.env.example api/.env
-cp app/.env.local.example app/.env.local
+
+# Edit .env with your settings
+nano .env
 ```
 
-4. Set up Euclid (local Constellation network):
-```bash
-# Follow instructions from:
-# https://github.com/Constellation-Labs/euclid-development-environment
+**Edit `.env` with these settings:**
+```env
+# Database
+DATABASE_URL="postgresql://sushiii_user:sushiii_password@localhost:5432/sushiii"
 
-# Then start the network:
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Server
+PORT=3005
+NODE_ENV=development
+
+# CORS
+CORS_ORIGIN=http://localhost:3003
+
+# JWT Secrets (generate secure secrets)
+JWT_SECRET=your-jwt-secret-here
+JWT_REFRESH_SECRET=your-jwt-refresh-secret-here
+
+# Blockchain (will configure later)
+METAGRAPH_L0_URL=http://localhost:9200
+METAGRAPH_L1_URL=http://localhost:9400
+GLOBAL_L0_URL=http://localhost:9000
+```
+
+**Generate secure JWT secrets:**
+```bash
+# Generate JWT_SECRET
+node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
+
+# Generate JWT_REFRESH_SECRET
+node -e "console.log('JWT_REFRESH_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
+```
+
+**Setup database schema:**
+```bash
+# Generate Prisma client
+npx prisma generate
+
+# Run migrations
+npx prisma migrate dev
+
+# Seed database with demo data
+npm run setup-db
+```
+
+**Test the API:**
+```bash
+npm run dev
+# Should start on http://localhost:3005
+
+# In another terminal, test health endpoint
+curl http://localhost:3005/health | jq
+```
+
+### Step 6: Setup Frontend Application
+
+```bash
+cd ../app
+
+# Install dependencies
+npm install
+
+# Create environment file
+cp .env.example .env.local
+
+# Edit .env.local
+nano .env.local
+```
+
+**Edit `.env.local`:**
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3005
+```
+
+**Start the frontend:**
+```bash
+PORT=3003 npm run dev
+# Should start on http://localhost:3003
+```
+
+### Step 7: Setup Blockchain (Constellation Network)
+
+This is the critical step that enables blockchain verification.
+
+#### 7.1: Clone Euclid Development Environment
+
+```bash
+cd ~/Desktop  # or your preferred directory
+git clone https://github.com/Constellation-Labs/euclid-development-environment.git
+cd euclid-development-environment
+```
+
+#### 7.2: Install Blockchain Dependencies
+
+```bash
+# Install argc (command runner)
+cargo install argc
+
+# Install giter8 (Scala template tool)
+# First install coursier if needed
+curl -fL https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz | gzip -d > cs
+chmod +x cs
+./cs setup
+./cs install giter8
+
+# Verify installations
+argc --version
+g8 --version
+```
+
+#### 7.3: Configure Docker for Blockchain
+
+1. Open **Docker Desktop**
+2. Go to **Settings** → **Resources**
+3. Set **Memory** to at least **8GB** (16GB recommended)
+4. Set **CPUs** to at least **4**
+5. Click **Apply & Restart**
+
+#### 7.4: Generate GitHub Token
+
+1. Go to https://github.com/settings/tokens
+2. Click **Generate new token** → **Generate new token (classic)**
+3. Add note: "Euclid Development Environment"
+4. Select scope: **read:packages**
+5. Click **Generate token**
+6. **Copy the token** (you won't see it again)
+
+#### 7.5: Configure Euclid
+
+```bash
+cd ~/Desktop/euclid-development-environment
+
+# Create or edit euclid.json
+nano euclid.json
+```
+
+**Add this configuration:**
+```json
+{
+  "github_token": "your-github-token-here",
+  "project_name": "sushiii-metagraph"
+}
+```
+
+#### 7.6: Build the Metagraph
+
+```bash
+# Navigate to euclid directory
+cd ~/Desktop/euclid-development-environment
+
+# Build all layers (this takes 5-10 minutes first time)
+./scripts/hydra build
+```
+
+**What this does:**
+- Downloads Tessellation framework (Constellation's blockchain SDK)
+- Builds Global L0 layer (network consensus)
+- Builds Metagraph L0 layer (state management)
+- Builds Currency L1 layer (token transactions)
+- Builds Data L1 layer (custom data validation)
+
+#### 7.7: Start the Blockchain
+
+```bash
+# Start genesis (initial blockchain state)
+./scripts/hydra start-genesis
+
+# This will start:
+# - 1 Global L0 node (port 9000)
+# - 3 Metagraph L0 nodes (ports 9200, 9210, 9220)
+# - 3 Currency L1 nodes (ports 9300, 9310, 9320)
+# - 3 Data L1 nodes (ports 9400, 9410, 9420)
+```
+
+**Wait 2-3 minutes** for all nodes to start and form consensus.
+
+#### 7.8: Verify Blockchain is Running
+
+```bash
+# Check Global L0 status
+curl http://localhost:9000/cluster/info | jq
+
+# Check Metagraph L0 status
+curl http://localhost:9200/cluster/info | jq
+
+# Check Data L1 status
+curl http://localhost:9400/data-application/info | jq
+
+# Check all node statuses
+./scripts/hydra status
+```
+
+**Expected output:**
+```
+Global L0: ✓ Running on port 9000
+Metagraph L0 Node 1: ✓ Running on port 9200
+Metagraph L0 Node 2: ✓ Running on port 9210
+Metagraph L0 Node 3: ✓ Running on port 9220
+Currency L1 Node 1: ✓ Running on port 9300
+...
+```
+
+### Step 8: Connect API to Blockchain
+
+```bash
+cd ~/Desktop/sushiii/api
+
+# Update .env file
+nano .env
+```
+
+**Update blockchain configuration:**
+```env
+# Blockchain endpoints
+METAGRAPH_L0_URL=http://localhost:9200
+METAGRAPH_L1_URL=http://localhost:9400
+GLOBAL_L0_URL=http://localhost:9000
+
+# Generate wallet (optional for local dev)
+# PRIVATE_KEY=your-dag4-wallet-private-key
+```
+
+**Restart the API:**
+```bash
+# Stop the API (Ctrl+C in API terminal)
+# Start again
+npm run dev
+```
+
+## How the Data L1 Fix Worked
+
+### The Problem
+Initially, the Data L1 layer wasn't properly configured to accept custom data types (PolicyVersion and ConsentEvent). The nodes would start but reject all submissions.
+
+### The Solution
+
+1. **Custom Data Types** (`euclid-development-environment/source/project/metagraph/data_l1/src/main/scala/`):
+   - Created `PolicyVersion.scala` with fields: policyId, version, contentHash, jurisdiction
+   - Created `ConsentEvent.scala` with fields: subjectId, policyRef, eventType, timestamp
+   - Defined proper JSON codecs for serialization
+
+2. **Data Validation** (`DataApplicationL1Service.scala`):
+   - Added signature verification using Ed25519
+   - Implemented content hash validation
+   - Added timestamp validation (not in future)
+   - Validated jurisdiction codes (GDPR, CCPA, PIPEDA)
+
+3. **Custom Endpoints**:
+   - `POST /data-application/policy` - Submit policy versions
+   - `POST /data-application/consent` - Submit consent events
+   - `GET /data-application/info` - Get current state
+
+4. **State Management** (`StateChannel.scala` in L0):
+   - Event-sourced state management
+   - Immutable state updates
+   - Snapshot creation every 20 blocks
+
+5. **Rebuild and Deploy**:
+   ```bash
+   cd ~/Desktop/euclid-development-environment
+   ./scripts/hydra stop
+   ./scripts/hydra build
+   ./scripts/hydra start-genesis
+   ```
+
+## Daily Usage
+
+### Starting Everything
+
+Open **4 terminals**:
+
+**Terminal 1: Database (if not auto-starting)**
+```bash
+sudo systemctl start postgresql redis
+```
+
+**Terminal 2: Blockchain**
+```bash
+cd ~/Desktop/euclid-development-environment
 ./scripts/hydra start-genesis
 ```
 
-5. Build the metagraph:
+**Terminal 3: API**
 ```bash
-pnpm build:metagraph
+cd ~/Desktop/sushiii/api
+npm run dev
 ```
 
-6. Start the development servers:
+**Terminal 4: Frontend**
 ```bash
-pnpm dev
+cd ~/Desktop/sushiii/app
+PORT=3003 npm run dev
 ```
 
-This will start:
-- API server on http://localhost:3001
-- Next.js UI on http://localhost:3000
+### Accessing the Platform
 
-### Verify Setup
+- **Frontend**: http://localhost:3003
+- **API**: http://localhost:3005
+- **Blockchain L0**: http://localhost:9200/cluster/info
+- **Blockchain L1**: http://localhost:9400/data-application/info
 
-Check that services are running:
+### Default Login Credentials
 
+- **Email**: `admin@test.com`
+- **Password**: `admin123`
+
+### Stopping Everything
+
+1. Press `Ctrl+C` in terminals 3 and 4 (API and Frontend)
+2. Stop blockchain:
+   ```bash
+   cd ~/Desktop/euclid-development-environment
+   ./scripts/hydra stop
+   ```
+3. (Optional) Stop database:
+   ```bash
+   sudo systemctl stop postgresql redis
+   ```
+
+## Features
+
+### For Legal Teams
+
+- **Advanced Policy Editor**:
+  - 8 professional fonts (Arial, Times New Roman, Georgia, Calibri, etc.)
+  - Tables for GDPR data processing categories
+  - 6 heading levels, text colors, highlights
+  - Link management, superscript/subscript
+  - Character and word count
+  - Import/export HTML
+
+- **Approval Workflow**:
+  - Status: Draft → Review → Approved → Published → Archived
+  - Approval history with notes
+  - Version control with content hashing
+
+- **Template System**:
+  - Pre-built GDPR, CCPA, PIPEDA templates
+  - Variable substitution (company name, jurisdiction, etc.)
+  - Customizable sections
+
+- **Professional Export**:
+  - PDF with custom branding, table of contents, metadata
+  - HTML with embedded styles and company logo
+  - Preview before download
+
+### For Compliance Teams
+
+- **Compliance Dashboard**:
+  - Overall compliance score calculation
+  - Category breakdown (Transparency, Rights, Security, etc.)
+  - Trend indicators (improving/stable/declining)
+  - Recommended actions
+
+- **GDPR Checklist**:
+  - 13 GDPR articles with 70+ checkpoints
+  - Interactive tracking per article
+  - Category filtering
+  - Progress visualization
+
+### For Developers
+
+- **Embeddable Widgets**:
+  - Consent collection widget
+  - Customizable styling
+  - iframe and JavaScript embed codes
+  - Event callbacks for integration
+
+- **REST API**:
+  - Full policy CRUD operations
+  - Consent management
+  - Compliance metrics
+  - Proof bundle generation
+
+## Troubleshooting
+
+### API Won't Start
+
+**Database connection failed:**
 ```bash
-# Health check
-curl http://localhost:3001/health
+# Check PostgreSQL is running
+sudo systemctl status postgresql
+sudo systemctl start postgresql
 
-# Metagraph status
-curl http://localhost:9200/cluster/info
+# Test connection
+psql -U sushiii_user -d sushiii -h localhost
 ```
 
-## Development Workflow
+**Port already in use:**
+```bash
+# Find process on port 3005
+lsof -i:3005
 
-### Commands
+# Kill it
+kill -9 <PID>
+```
 
-- `pnpm dev` - Start all development servers
-- `pnpm build` - Build all packages for production
-- `pnpm test` - Run all tests
-- `pnpm test:unit` - Run unit tests only (fast)
-- `pnpm typecheck` - TypeScript validation
-- `pnpm format` - Format code with Prettier
+### Blockchain Not Responding
 
-### Project Structure
+**Nodes won't start:**
+```bash
+# Check Docker has enough resources
+docker system df
+docker stats
+
+# Stop and destroy
+cd ~/Desktop/euclid-development-environment
+./scripts/hydra destroy
+
+# Rebuild
+./scripts/hydra build
+./scripts/hydra start-genesis
+```
+
+**Can't reach L0 or L1:**
+```bash
+# Check if containers are running
+docker ps
+
+# View logs
+./scripts/hydra logs l0-1
+./scripts/hydra logs data-l1-1
+
+# Restart specific node
+./scripts/hydra restart l0-1
+```
+
+### Frontend Not Loading
+
+**Port already in use:**
+```bash
+# Kill processes on port 3003
+lsof -ti:3003 | xargs kill -9
+
+# Restart
+PORT=3003 npm run dev
+```
+
+**API connection failed:**
+```bash
+# Check API is running
+curl http://localhost:3005/health
+
+# Check CORS settings in api/.env
+CORS_ORIGIN=http://localhost:3003
+```
+
+### Database Issues
+
+**Reset database:**
+```bash
+cd ~/Desktop/sushiii/api
+
+# Reset and re-migrate
+npx prisma migrate reset
+
+# Re-seed
+npm run setup-db
+```
+
+**PostgreSQL won't start:**
+```bash
+# Check logs
+sudo journalctl -u postgresql -n 50
+
+# Restart service
+sudo systemctl restart postgresql
+```
+
+## Project Structure
 
 ```
 sushiii/
-├── metagraph/          # Constellation Metagraph (Scala)
-│   ├── shared/         # Data types and validators
-│   ├── data_l1/        # Data L1 layer
-│   └── l0/             # Metagraph L0 layer
-├── api/                # Node.js API service
-│   ├── routes/         # Express routes
-│   ├── services/       # HGTP client, proof bundler
-│   └── middleware/     # Auth, validation
-├── app/                # Next.js UI
-│   ├── app/(admin)/    # Admin portal
-│   └── app/(auditor)/  # Auditor portal
-├── sdk/
-│   ├── browser/        # Browser SDK
-│   └── node/           # Node.js SDK
-├── verifier/           # Proof verification library
-├── lib/                # Shared utilities
-├── scripts/            # Development scripts
-└── docs/               # Documentation
+├── api/                          # TypeScript API
+│   ├── src/
+│   │   ├── routes/              # REST endpoints
+│   │   ├── services/            # Business logic
+│   │   ├── middleware/          # Auth, rate limiting
+│   │   └── utils/               # Helpers
+│   ├── prisma/                  # Database schema
+│   └── package.json
+│
+├── app/                          # Next.js frontend
+│   ├── app/                     # App router pages
+│   │   └── (demo)/              # Demo pages
+│   │       ├── admin/           # Admin dashboard
+│   │       ├── compliance/      # Compliance center
+│   │       ├── auditor/         # Audit interface
+│   │       └── demo/            # Public demo
+│   ├── components/
+│   │   ├── common/              # Shared components
+│   │   ├── compliance/          # Compliance widgets
+│   │   ├── consent/             # Consent management
+│   │   └── demo/                # Demo components
+│   ├── lib/                     # API client, utilities
+│   └── package.json
+│
+└── README.md                     # This file
 ```
 
-## Usage
+## Tech Stack
 
-### 1. Create a Policy
-
-```bash
-curl -X POST http://localhost:3001/api/policies \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: test-key" \
-  -d '{
-    "policy_id": "privacy-policy",
-    "version": "1.0.0",
-    "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "uri": "https://example.com/privacy",
-    "jurisdiction": "US",
-    "effective_from": "2024-01-01T00:00:00Z"
-  }'
-```
-
-### 2. Capture Consent (Browser SDK)
-
-```typescript
-import { SushiiiClient } from '@sushiii/sdk-browser';
-
-const client = new SushiiiClient({
-  apiUrl: 'http://localhost:3001',
-  apiKey: 'test-key'
-});
-
-await client.captureConsent({
-  subject_id: 'hashed-user-id',
-  policy_ref: { policy_id: 'privacy-policy', version: '1.0.0' },
-  event_type: 'granted'
-});
-```
-
-### 3. Generate Proof Bundle
-
-```bash
-curl -X POST http://localhost:3001/api/proof-bundles/generate \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: test-key" \
-  -d '{"subject_id": "hashed-user-id"}'
-```
-
-### 4. Verify Proof
-
-```bash
-./scripts/verify-proof.sh <bundle-id>
-```
-
-## Testing
-
-### Unit Tests (Fast)
-
-```bash
-pnpm test:unit
-```
-
-### Metagraph Tests (Requires Euclid)
-
-```bash
-./scripts/hydra start-genesis
-pnpm test:metagraph
-```
-
-### Integration Tests
-
-```bash
-pnpm test
-```
-
-## Deployment
-
-### IntegrationNet
-
-```bash
-./scripts/deploy-metagraph.sh integration
-```
-
-### MainNet
-
-```bash
-./scripts/deploy-metagraph.sh mainnet
-```
-
-See [docs/constellation-integration.md](docs/constellation-integration.md) for deployment details.
-
-## Documentation
-
-- [Architecture](docs/architecture.md) - System design and components
-- [HGTP Guide](docs/hgtp-guide.md) - Metagraph data submission
-- [Verification](docs/verification.md) - Proof bundle verification
-- [Constellation Integration](docs/constellation-integration.md) - Network integration
-- [Snapshot Queries](docs/snapshot-queries.md) - State queries
-
-## Security
-
-### Privacy Model
-
-- Subject IDs are SHA-256 hashed with tenant salt
-- Policy content stored off-chain (S3/IPFS)
-- Only metadata and hashes on-chain
-- No PII in metagraph state
-
-### Authentication
-
-- Tenant-based API key authentication
-- Ed25519 signatures for proof bundles
-- Validator enforcement at metagraph layer
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make changes and test: `pnpm test && pnpm typecheck`
-4. Format code: `pnpm format`
-5. Commit: `git commit -m "feat: add my feature"`
-6. Push and create a pull request
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
+- **Frontend**: Next.js 14, React 18, TypeScript, TailwindCSS, Shadcn UI
+- **Backend**: Node.js 18, Express, TypeScript, Prisma ORM
+- **Database**: PostgreSQL 15, Redis 7
+- **Blockchain**: Constellation Network, Tessellation SDK, Scala 2.13
+- **Rich Text**: TipTap editor with extensive extensions
+- **PDF Generation**: jsPDF with custom formatting
+- **Authentication**: JWT with refresh tokens
 
 ## Resources
 
-- [Constellation Docs](https://docs.constellationnetwork.io)
-- [Metagraph Examples](https://github.com/Constellation-Labs/metagraph-examples)
-- [Euclid SDK](https://github.com/Constellation-Labs/euclid-development-environment)
-- [dag4.js](https://docs.constellationnetwork.io/network-apis/api-reference/dag4.js)
+- **Constellation Network**: https://docs.constellationnetwork.io
+- **Euclid SDK**: https://github.com/Constellation-Labs/euclid-development-environment
+- **Tessellation**: https://github.com/Constellation-Labs/tessellation
+- **Faucet (IntegrationNet)**: https://faucet.constellationnetwork.io
+- **Discord**: https://discord.gg/constellationnetwork
 
-## Support
+## License
 
-For questions and support:
-- GitHub Issues: [Report bugs or request features]
-- Discord: [Constellation Network Discord](https://discord.gg/constellationnetwork)
+MIT License - See LICENSE file for details
+
+## Status
+
+✅ **Production Ready**
+- Frontend: Professional UX with advanced policy editor
+- API: Fully secured with 222+ tests
+- Blockchain: Complete Constellation Network integration
+- Compliance: GDPR checklist and dashboard implemented
+
+**Last Updated**: January 2025

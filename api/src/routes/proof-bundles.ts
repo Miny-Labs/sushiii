@@ -4,6 +4,25 @@ import { proofBundler } from '../services/proof-bundler.js';
 
 const router = Router();
 
+// List all bundles (optionally filtered by subject_id)
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const { subject_id } = req.query;
+    const subjectId = typeof subject_id === 'string' ? subject_id : undefined;
+
+    const bundles = await proofBundler.listBundles(subjectId);
+
+    res.json({
+      success: true,
+      count: bundles.length,
+      data: bundles,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate a new proof bundle
 router.post('/generate', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { subject_id } = req.body;
@@ -24,6 +43,7 @@ router.post('/generate', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
+// Get a specific bundle by ID
 router.get('/:bundle_id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { bundle_id } = req.params;

@@ -1,0 +1,26 @@
+{
+  "subject_id": "subject-canonical",
+  "consents": [
+    {
+      "id": "c2",
+      "timestamp": "2024-01-02T00:00:00Z",
+      "status": "active",
+      "subject_id": "subject-canonical"
+    },
+    {
+      "id": "c1",
+      "timestamp": "2024-01-01T00:00:00Z",
+      "status": "active",
+      "subject_id": "subject-canonical"
+    }
+  ],
+  "snapshot_refs": [
+    {
+      "ordinal": 1,
+      "hash": "hash",
+      "timestamp": "2025-11-04T04:37:41.282Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:37:41.282Z",
+  "signature": "d3d7a3a0145dea2e708282a78b2c55a284fb0575bd3b36960ac1f92aa337a1213816a26039dad73645de5052dfe60212954099cb41757bd52eeb12c0683d8200"
+}

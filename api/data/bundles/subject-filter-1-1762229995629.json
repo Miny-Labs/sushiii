@@ -1,0 +1,13 @@
+{
+  "subject_id": "subject-filter-1",
+  "consents": [],
+  "snapshot_refs": [
+    {
+      "ordinal": 1,
+      "hash": "hash",
+      "timestamp": "2025-11-04T04:19:55.629Z"
+    }
+  ],
+  "generated_at": "2025-11-04T04:19:55.629Z",
+  "signature": "f631329f49f2bc6341fe6b266c950fa050356d7667baf4239338c0d8c37e363cb6d2c116cd4ba7c3fe94e0f4deea3a2160e40af34ef822bd67e4ef8898fb4606"
+}

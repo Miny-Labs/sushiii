@@ -1,63 +1,157 @@
+import { dag4 } from '@stardust-collective/dag4';
 import { PolicyVersion, ConsentEvent } from '../types/index.js';
+import { executeWithRetry, ErrorClassifier } from './error-classifier.js';
+import { metricsService } from './metrics.js';
 
 class HGTPClient {
   private readonly l0Url: string;
   private readonly l1Url: string;
   private readonly metagraphId: string;
+  private readonly globalL0Url: string;
+  private initialized: boolean = false;
 
   constructor() {
     this.l0Url = process.env.METAGRAPH_L0_URL || 'http://localhost:9200';
     this.l1Url = process.env.METAGRAPH_L1_URL || 'http://localhost:9400';
+    this.globalL0Url = process.env.GLOBAL_L0_URL || 'http://localhost:9000';
     this.metagraphId = process.env.METAGRAPH_ID || '';
   }
 
-  async submitPolicyVersion(policyVersion: PolicyVersion): Promise<{ hash: string }> {
+  private async initialize() {
+    if (this.initialized) return;
+
     try {
-      const response = await fetch(`${this.l1Url}/data-application`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'PolicyVersion',
-          data: policyVersion,
-        }),
+      // Connect to Constellation Network
+      dag4.account.connect({
+        networkVersion: '2.0',
+        beUrl: this.globalL0Url,
+        l0Url: this.l0Url,
+        l1Url: this.l1Url,
       });
 
-      if (!response.ok) {
-        throw new Error(`HGTP submission failed: ${response.statusText}`);
+      // Login with private key for signing
+      const privateKey = process.env.PRIVATE_KEY;
+      if (!privateKey) {
+        throw new Error('PRIVATE_KEY environment variable not set');
       }
 
-      const result = await response.json();
-      return { hash: result.hash || 'pending' };
+      await dag4.account.loginPrivateKey(privateKey);
+
+      this.initialized = true;
+      console.log('HGTP Client initialized successfully');
     } catch (error) {
-      console.error('Error submitting policy version:', error);
+      console.error('Failed to initialize HGTP client:', error);
       throw error;
     }
   }
 
-  async submitConsentEvent(consentEvent: ConsentEvent): Promise<{ hash: string }> {
+  async submitPolicyVersion(policyVersion: PolicyVersion): Promise<{ hash: string }> {
+    await this.initialize();
+
+    const start = Date.now();
+    let status = 'success';
+
     try {
-      const response = await fetch(`${this.l1Url}/data-application`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const result = await executeWithRetry(
+        async () => {
+          // The Data L1 expects just the PolicyVersion, not wrapped in a DataUpdate
+          // The metagraph will create the DataUpdate wrapper internally
+          const response = await fetch(`${this.l1Url}/data-application/policy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(policyVersion),
+            signal: AbortSignal.timeout(10000), // 10s timeout
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            const error: any = new Error(`HGTP submission failed: ${response.statusText} - ${errorText}`);
+            error.status = response.status;
+            throw error;
+          }
+
+          const result = await response.json();
+          console.log('[HGTP] Policy version submitted successfully:', {
+            policy_id: policyVersion.policy_id,
+            version: policyVersion.version,
+            status: result.status,
+          });
+
+          return { hash: result.policy_id || 'pending' };
         },
-        body: JSON.stringify({
-          type: 'ConsentEvent',
-          data: consentEvent,
-        }),
-      });
+        'submitPolicyVersion'
+      );
 
-      if (!response.ok) {
-        throw new Error(`HGTP submission failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return { hash: result.hash || 'pending' };
+      metricsService.policyVersionsSubmitted.inc({ status: 'success' });
+      return result;
     } catch (error) {
-      console.error('Error submitting consent event:', error);
+      status = 'failure';
+      metricsService.policyVersionsSubmitted.inc({ status: 'failure' });
       throw error;
+    } finally {
+      const duration = (Date.now() - start) / 1000;
+      metricsService.hgtpSubmissionDuration.observe({ type: 'policy' }, duration);
+      metricsService.hgtpSubmissionTotal.inc({ type: 'policy', status });
+    }
+  }
+
+  async submitConsentEvent(consentEvent: ConsentEvent): Promise<{ hash: string }> {
+    await this.initialize();
+
+    const start = Date.now();
+    let status = 'success';
+
+    try {
+      const result = await executeWithRetry(
+        async () => {
+          // The Data L1 expects just the ConsentEvent, not wrapped in a DataUpdate
+          // The metagraph will create the DataUpdate wrapper internally
+          const response = await fetch(`${this.l1Url}/data-application/consent`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(consentEvent),
+            signal: AbortSignal.timeout(10000), // 10s timeout
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            const error: any = new Error(`HGTP submission failed: ${response.statusText} - ${errorText}`);
+            error.status = response.status;
+            throw error;
+          }
+
+          const result = await response.json();
+          console.log('[HGTP] Consent event submitted successfully:', {
+            subject_id: consentEvent.subject_id,
+            event_type: consentEvent.event_type,
+            status: result.status,
+          });
+
+          return { hash: result.consent_id || result.hash || 'pending' };
+        },
+        'submitConsentEvent'
+      );
+
+      metricsService.consentEventsSubmitted.inc({
+        status: 'success',
+        event_type: consentEvent.event_type,
+      });
+      return result;
+    } catch (error) {
+      status = 'failure';
+      metricsService.consentEventsSubmitted.inc({
+        status: 'failure',
+        event_type: consentEvent.event_type,
+      });
+      throw error;
+    } finally {
+      const duration = (Date.now() - start) / 1000;
+      metricsService.hgtpSubmissionDuration.observe({ type: 'consent' }, duration);
+      metricsService.hgtpSubmissionTotal.inc({ type: 'consent', status });
     }
   }
 
